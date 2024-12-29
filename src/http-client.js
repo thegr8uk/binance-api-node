@@ -1,3 +1,4 @@
+import fs from 'fs';
 import crypto from 'crypto'
 import zip from 'lodash.zipobject'
 import HttpsProxyAgent from 'https-proxy-agent'
@@ -169,13 +170,19 @@ const keyCall = ({ apiKey, pubCall }) => (path, data, method = 'GET') => {
 const privateCall = ({
   apiKey,
   apiSecret,
+  privateKey,
+  privateKeyAlgo,
   proxy,
   endpoints,
   getTime = defaultGetTime,
   pubCall,
 }) => (path, data = {}, method = 'GET', noData, noExtra) => {
-  if (!apiKey || !apiSecret) {
-    throw new Error('You need to pass an API key and secret to make authenticated calls.')
+  if (!apiKey) {
+    throw new Error('You need to pass an API key to make authenticated calls.')
+  }
+
+  if (!apiSecret && (!privateKey || !privateKeyAlgo)) {
+    throw new Error('You need to pass either API Secret or Private key to make authenticated calls.')
   }
 
   return (data && data.useServerTime
@@ -186,10 +193,26 @@ const privateCall = ({
       delete data.useServerTime
     }
 
-    const signature = crypto
+    let signature = '';
+    if (apiSecret) {
+      signature = crypto
       .createHmac('sha256', apiSecret)
       .update(makeQueryString({ ...data, timestamp }).substr(1))
       .digest('hex')
+    } else {
+      const privateKeyContent = privateKey.indexOf('-----BEGIN PRIVATE KEY-----') == 0 ? privateKey: fs.readFileSync(privateKey, 'utf8');
+      const privateKeyInstance = crypto.createPrivateKey({
+          key: privateKeyContent,
+          format: 'pem',
+          type: 'pkcs8'
+      });
+      if (privateKeyAlgo == 'Ed25519') {
+        const sigBuffer = crypto.sign(null, Buffer.from(makeQueryString({ ...data, timestamp }).substr(1), 'ascii'), privateKeyInstance);
+        signature = sigBuffer.toString('base64');
+      } else {
+        throw new Error('Only Ed25519 type keys are supported right now.')
+      }
+    }  
 
     const newData = noExtra ? data : { ...data, timestamp, signature }
 

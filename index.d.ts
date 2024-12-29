@@ -3,6 +3,8 @@ declare module 'binance-api-node' {
   export default function(options?: {
     apiKey?: string
     apiSecret?: string
+    privateKey?: string
+    privateKeyAlgo?: string
     getTime?: () => number | Promise<number>
     httpBase?: string
     httpFutures?: string
